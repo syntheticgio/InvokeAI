@@ -182,12 +182,15 @@ def test_text_to_3d_returns_hunyuan3d_output(tmp_path: Path) -> None:
     ctx = _make_mock_context(tmp_path)
 
     with patch("nodes.hunyuan3d.invocations.load_model", return_value=fake_pipeline), \
-         patch("nodes.hunyuan3d.invocations.save_mesh", return_value=str(tmp_path / "out.glb")), \
+         patch("nodes.hunyuan3d.invocations.save_mesh", return_value=str(tmp_path / "out.glb")) as mock_save, \
          patch("nodes.hunyuan3d.invocations._render_thumbnail", return_value=Image.new("RGB", (256, 256))):
         result = invocation.invoke(ctx)
 
     assert isinstance(result, Hunyuan3DOutput)
+    assert result.mesh_path == str(tmp_path / "out.glb")
     assert result.format == "glb"
+    assert result.thumbnail.image_name == "test-thumb-001.png"
+    mock_save.assert_called_once_with(fake_mesh_bytes, "glb")
 
 
 def test_text_to_3d_passes_prompt_to_pipeline(tmp_path: Path) -> None:
