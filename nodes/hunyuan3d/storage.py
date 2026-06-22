@@ -14,8 +14,9 @@ def _get_outputs_3d_dir() -> Path:
 
 def save_mesh(mesh_bytes: bytes, fmt: str) -> str:
     """Write mesh bytes to <outputs_path>/3d/<uuid>.<fmt> and return the absolute path."""
+    if not fmt.isalnum():
+        raise ValueError(f"Invalid output format '{fmt}': must be alphanumeric (e.g. glb, obj, fbx)")
     dir_ = _get_outputs_3d_dir()
-    dir_.mkdir(parents=True, exist_ok=True)
     filename = f"{uuid.uuid4()}.{fmt}"
     dest = dir_ / filename
     dest.write_bytes(mesh_bytes)
