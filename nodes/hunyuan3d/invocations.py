@@ -120,3 +120,66 @@ class ImageTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
             format=fmt,
             file_size_bytes=len(mesh_bytes),
         )
+
+
+@invocation(
+    "text_to_3d",
+    title="Text to 3D (Hunyuan3D)",
+    tags=["3d", "hunyuan3d", "mesh"],
+    category="3d",
+    version="1.0.0",
+    classification=Classification.Beta,
+)
+class TextTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
+    """Generate a 3D mesh from a text prompt using Hunyuan3D 2.1.
+
+    Hunyuan3D requires an image input; this node generates a single-view image
+    internally via the pipeline's built-in text→image stage before mesh generation.
+    """
+
+    prompt: str = InputField(description="Text description of the 3D object to generate")
+    model_path: str = InputField(
+        default="models/hunyuan3d/hunyuan3d-2-1",
+        description="Path to Hunyuan3D weights, relative to InvokeAI root or absolute",
+    )
+    steps: int = InputField(default=30, ge=10, le=100, description="Number of diffusion steps")
+    guidance_scale: float = InputField(default=5.0, ge=1.0, le=20.0, description="Guidance scale")
+    output_format: Literal["glb", "obj", "fbx"] = InputField(
+        default="glb", description="Output mesh format"
+    )
+    render_thumbnail: bool = InputField(
+        default=True, description="Render a PNG preview thumbnail for the gallery"
+    )
+
+    def invoke(self, context: InvocationContext) -> Hunyuan3DOutput:
+        pipeline = load_model(self.model_path)
+
+        meshes = pipeline(
+            prompt=self.prompt,
+            num_inference_steps=self.steps,
+            guidance_scale=self.guidance_scale,
+        )
+        if not meshes:
+            raise RuntimeError("Hunyuan3D pipeline returned no meshes. Check prompt and model.")
+        mesh = meshes[0]
+
+        fmt = self.output_format
+        mesh_bytes = mesh.export(file_type=fmt)
+        if not mesh_bytes:
+            raise RuntimeError(
+                f"mesh.export() returned empty/None for format '{fmt}'. Mesh may be degenerate."
+            )
+        mesh_path = save_mesh(mesh_bytes, fmt)
+
+        thumbnail_field: Optional[ImageField] = None
+        if self.render_thumbnail:
+            thumb_image = _render_thumbnail(mesh)
+            image_dto = context.images.save(image=thumb_image)
+            thumbnail_field = ImageField(image_name=image_dto.image_name)
+
+        return Hunyuan3DOutput(
+            thumbnail=thumbnail_field,
+            mesh_path=mesh_path,
+            format=fmt,
+            file_size_bytes=len(mesh_bytes),
+        )
