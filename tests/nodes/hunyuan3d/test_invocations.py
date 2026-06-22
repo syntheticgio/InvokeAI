@@ -103,3 +103,77 @@ def test_image_to_3d_raises_on_missing_model(tmp_path: Path) -> None:
                side_effect=FileNotFoundError("Hunyuan3D model not found")):
         with pytest.raises(FileNotFoundError, match="not found"):
             invocation.invoke(ctx)
+
+
+def test_image_to_3d_raises_on_empty_pipeline_result(tmp_path: Path) -> None:
+    """invoke raises RuntimeError when pipeline returns an empty list."""
+    from nodes.hunyuan3d.invocations import ImageTo3DInvocation
+    from invokeai.app.invocations.fields import ImageField
+
+    invocation = ImageTo3DInvocation(
+        id="test-node-4",
+        image=ImageField(image_name="source.png"),
+        model_path=str(tmp_path / "fake_model"),
+        steps=10,
+        guidance_scale=5.0,
+        output_format="glb",
+        render_thumbnail=False,
+    )
+
+    fake_pipeline = MagicMock()
+    fake_pipeline.return_value = []  # empty result
+
+    ctx = _make_mock_context(tmp_path)
+
+    with patch("nodes.hunyuan3d.invocations.load_model", return_value=fake_pipeline):
+        with pytest.raises(RuntimeError, match="no meshes"):
+            invocation.invoke(ctx)
+
+
+def test_image_to_3d_raises_on_null_export(tmp_path: Path) -> None:
+    """invoke raises RuntimeError when mesh.export() returns None."""
+    from nodes.hunyuan3d.invocations import ImageTo3DInvocation
+    from invokeai.app.invocations.fields import ImageField
+
+    invocation = ImageTo3DInvocation(
+        id="test-node-5",
+        image=ImageField(image_name="source.png"),
+        model_path=str(tmp_path / "fake_model"),
+        steps=10,
+        guidance_scale=5.0,
+        output_format="glb",
+        render_thumbnail=False,
+    )
+
+    fake_mesh = MagicMock()
+    fake_mesh.export.return_value = None  # degenerate mesh
+
+    fake_pipeline = MagicMock()
+    fake_pipeline.return_value = [fake_mesh]
+
+    ctx = _make_mock_context(tmp_path)
+
+    with patch("nodes.hunyuan3d.invocations.load_model", return_value=fake_pipeline):
+        with pytest.raises(RuntimeError, match="export"):
+            invocation.invoke(ctx)
+
+
+def test_render_thumbnail_raises_on_none_save_image(tmp_path: Path) -> None:
+    """_render_thumbnail raises RuntimeError when scene.save_image returns None (headless env)."""
+    from nodes.hunyuan3d.invocations import _render_thumbnail
+
+    # Build a real class so that isinstance() works correctly in the function.
+    class FakeScene:
+        def __init__(self, meshes=None):
+            pass
+
+        def save_image(self, resolution=None):
+            return None  # simulate headless / no render backend
+
+    mock_trimesh = MagicMock()
+    mock_trimesh.Scene = FakeScene
+
+    # Pass a plain object (not a FakeScene) so the else-branch wraps it in FakeScene([mesh]).
+    with patch.dict("sys.modules", {"trimesh": mock_trimesh}):
+        with pytest.raises(RuntimeError, match="save_image"):
+            _render_thumbnail(MagicMock())

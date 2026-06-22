@@ -41,11 +41,18 @@ class Hunyuan3DOutput(BaseInvocationOutput):
 
 def _render_thumbnail(mesh: object, size: int = 256) -> Image.Image:
     """Render a top-down PNG thumbnail of the mesh using trimesh."""
+    from io import BytesIO
+
     import trimesh  # type: ignore[import]
 
     scene = mesh if isinstance(mesh, trimesh.Scene) else trimesh.Scene([mesh])
-    png_bytes: bytes = scene.save_image(resolution=(size, size))
-    from io import BytesIO
+    png_bytes = scene.save_image(resolution=(size, size))
+    if png_bytes is None:
+        raise RuntimeError(
+            "trimesh.Scene.save_image() returned None. "
+            "A render backend (pyrender or pyglet) must be installed and a display must be available. "
+            "Set render_thumbnail=False to skip thumbnail generation."
+        )
     return Image.open(BytesIO(png_bytes)).convert("RGB")
 
 
@@ -87,11 +94,17 @@ class ImageTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
             num_inference_steps=self.steps,
             guidance_scale=self.guidance_scale,
         )
+        if not meshes:
+            raise RuntimeError("Hunyuan3D pipeline returned no meshes. Check input image and model.")
         mesh = meshes[0]
 
         # 4. Export to bytes and save to disk
         fmt = self.output_format
-        mesh_bytes: bytes = mesh.export(file_type=fmt)
+        mesh_bytes = mesh.export(file_type=fmt)
+        if not mesh_bytes:
+            raise RuntimeError(
+                f"mesh.export() returned empty/None for format '{fmt}'. Mesh may be degenerate."
+            )
         mesh_path = save_mesh(mesh_bytes, fmt)
 
         # 5. Optionally render thumbnail
