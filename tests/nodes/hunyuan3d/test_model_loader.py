@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -11,11 +12,12 @@ def test_load_model_returns_cached_instance(tmp_path: Path) -> None:
     _MODEL_CACHE.clear()
     mock_pipeline = MagicMock()
 
-    with patch("nodes.hunyuan3d.model_loader._load_from_disk", return_value=mock_pipeline):
+    with patch("nodes.hunyuan3d.model_loader._load_from_disk", return_value=mock_pipeline) as mock_load:
         result1 = load_model(str(tmp_path))
         result2 = load_model(str(tmp_path))
 
     assert result1 is result2
+    mock_load.assert_called_once_with(str(tmp_path))
 
 
 def test_load_model_different_paths_different_instances(tmp_path: Path) -> None:
@@ -43,3 +45,16 @@ def test_load_from_disk_raises_if_path_missing(tmp_path: Path) -> None:
 
     with pytest.raises(FileNotFoundError, match="not found"):
         _load_from_disk(str(tmp_path / "nonexistent"))
+
+
+def test_load_from_disk_raises_on_missing_hy3dgen(tmp_path: Path) -> None:
+    """_load_from_disk raises ImportError with helpful message when hy3dgen is not installed."""
+    from nodes.hunyuan3d.model_loader import _load_from_disk
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+
+    # Simulate hy3dgen not being installed by replacing it with None in sys.modules
+    with patch.dict(sys.modules, {"hy3dgen": None, "hy3dgen.shapegen": None}):
+        with pytest.raises(ImportError, match="hy3dgen is not installed"):
+            _load_from_disk(str(model_dir))
