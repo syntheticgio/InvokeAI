@@ -1,2 +1,3 @@
 # Hunyuan3D node pack for InvokeAI
-# Invocation imports are added here after invocations.py is created (Task 3).
+# InvokeAI's node loader discovers invocations imported here.
+from .invocations import ImageTo3DInvocation  # noqa: F401

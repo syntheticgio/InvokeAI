@@ -1,0 +1,109 @@
+from __future__ import annotations
+
+from typing import Literal, Optional
+
+from PIL import Image
+
+from invokeai.app.invocations.baseinvocation import (
+    BaseInvocation,
+    BaseInvocationOutput,
+    Classification,
+    invocation,
+    invocation_output,
+)
+from invokeai.app.invocations.fields import (
+    ImageField,
+    InputField,
+    OutputField,
+    WithBoard,
+    WithMetadata,
+)
+from invokeai.app.services.shared.invocation_context import InvocationContext
+
+from .model_loader import load_model
+from .storage import save_mesh
+
+
+@invocation_output("hunyuan3d_output")
+class Hunyuan3DOutput(BaseInvocationOutput):
+    """Output from Hunyuan3D mesh generation."""
+
+    thumbnail: Optional[ImageField] = OutputField(
+        default=None,
+        description="Rendered PNG preview of the mesh (None if render_thumbnail=False)",
+    )
+    mesh_path: str = OutputField(
+        description="Absolute filesystem path to the generated 3D file",
+    )
+    format: str = OutputField(description="Output format: glb | obj | fbx")
+    file_size_bytes: int = OutputField(description="Size of the generated mesh file in bytes")
+
+
+def _render_thumbnail(mesh: object, size: int = 256) -> Image.Image:
+    """Render a top-down PNG thumbnail of the mesh using trimesh."""
+    import trimesh  # type: ignore[import]
+
+    scene = mesh if isinstance(mesh, trimesh.Scene) else trimesh.Scene([mesh])
+    png_bytes: bytes = scene.save_image(resolution=(size, size))
+    from io import BytesIO
+    return Image.open(BytesIO(png_bytes)).convert("RGB")
+
+
+@invocation(
+    "image_to_3d",
+    title="Image to 3D (Hunyuan3D)",
+    tags=["3d", "hunyuan3d", "mesh"],
+    category="3d",
+    version="1.0.0",
+    classification=Classification.Beta,
+)
+class ImageTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
+    """Generate a 3D mesh from an input image using Hunyuan3D 2.1."""
+
+    image: ImageField = InputField(description="Source image to convert to 3D")
+    model_path: str = InputField(
+        default="models/hunyuan3d/hunyuan3d-2-1",
+        description="Path to Hunyuan3D weights, relative to InvokeAI root or absolute",
+    )
+    steps: int = InputField(default=30, ge=10, le=100, description="Number of diffusion steps")
+    guidance_scale: float = InputField(default=5.0, ge=1.0, le=20.0, description="Guidance scale")
+    output_format: Literal["glb", "obj", "fbx"] = InputField(
+        default="glb", description="Output mesh format"
+    )
+    render_thumbnail: bool = InputField(
+        default=True, description="Render a PNG preview thumbnail for the gallery"
+    )
+
+    def invoke(self, context: InvocationContext) -> Hunyuan3DOutput:
+        # 1. Load source image
+        source_image: Image.Image = context.images.get_pil(self.image.image_name)
+
+        # 2. Load (or retrieve cached) pipeline
+        pipeline = load_model(self.model_path)
+
+        # 3. Run inference — pipeline returns a list; first element is the mesh
+        meshes = pipeline(
+            image=source_image,
+            num_inference_steps=self.steps,
+            guidance_scale=self.guidance_scale,
+        )
+        mesh = meshes[0]
+
+        # 4. Export to bytes and save to disk
+        fmt = self.output_format
+        mesh_bytes: bytes = mesh.export(file_type=fmt)
+        mesh_path = save_mesh(mesh_bytes, fmt)
+
+        # 5. Optionally render thumbnail
+        thumbnail_field: Optional[ImageField] = None
+        if self.render_thumbnail:
+            thumb_image = _render_thumbnail(mesh)
+            image_dto = context.images.save(image=thumb_image)
+            thumbnail_field = ImageField(image_name=image_dto.image_name)
+
+        return Hunyuan3DOutput(
+            thumbnail=thumbnail_field,
+            mesh_path=mesh_path,
+            format=fmt,
+            file_size_bytes=len(mesh_bytes),
+        )
