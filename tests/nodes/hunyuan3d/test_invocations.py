@@ -219,6 +219,80 @@ def test_text_to_3d_passes_prompt_to_pipeline(tmp_path: Path) -> None:
     assert call_kwargs.get("prompt") == "a glowing crystal orb"
 
 
+def test_text_to_3d_skips_thumbnail_when_disabled(tmp_path: Path) -> None:
+    """When render_thumbnail=False, context.images.save is never called for TextTo3D."""
+    from nodes.hunyuan3d.invocations import TextTo3DInvocation
+
+    invocation = TextTo3DInvocation(
+        id="test-node-8",
+        prompt="a barrel",
+        model_path=str(tmp_path / "fake_model"),
+        steps=10,
+        guidance_scale=5.0,
+        output_format="glb",
+        render_thumbnail=False,
+    )
+
+    fake_pipeline = MagicMock()
+    fake_pipeline.return_value = [MagicMock(export=MagicMock(return_value=b"glb"))]
+    ctx = _make_mock_context(tmp_path)
+
+    with patch("nodes.hunyuan3d.invocations.load_model", return_value=fake_pipeline), \
+         patch("nodes.hunyuan3d.invocations.save_mesh", return_value=str(tmp_path / "out.glb")):
+        result = invocation.invoke(ctx)
+
+    ctx.images.save.assert_not_called()
+    assert result.thumbnail is None
+
+
+def test_text_to_3d_raises_on_empty_pipeline_result(tmp_path: Path) -> None:
+    """TextTo3DInvocation raises RuntimeError when pipeline returns empty list."""
+    from nodes.hunyuan3d.invocations import TextTo3DInvocation
+
+    invocation = TextTo3DInvocation(
+        id="test-node-9",
+        prompt="a barrel",
+        model_path=str(tmp_path / "fake_model"),
+        steps=10,
+        guidance_scale=5.0,
+        output_format="glb",
+        render_thumbnail=False,
+    )
+
+    fake_pipeline = MagicMock()
+    fake_pipeline.return_value = []
+    ctx = _make_mock_context(tmp_path)
+
+    with patch("nodes.hunyuan3d.invocations.load_model", return_value=fake_pipeline):
+        with pytest.raises(RuntimeError, match="no meshes"):
+            invocation.invoke(ctx)
+
+
+def test_text_to_3d_raises_on_null_export(tmp_path: Path) -> None:
+    """TextTo3DInvocation raises RuntimeError when mesh.export() returns None."""
+    from nodes.hunyuan3d.invocations import TextTo3DInvocation
+
+    invocation = TextTo3DInvocation(
+        id="test-node-10",
+        prompt="a barrel",
+        model_path=str(tmp_path / "fake_model"),
+        steps=10,
+        guidance_scale=5.0,
+        output_format="glb",
+        render_thumbnail=False,
+    )
+
+    fake_mesh = MagicMock()
+    fake_mesh.export.return_value = None
+    fake_pipeline = MagicMock()
+    fake_pipeline.return_value = [fake_mesh]
+    ctx = _make_mock_context(tmp_path)
+
+    with patch("nodes.hunyuan3d.invocations.load_model", return_value=fake_pipeline):
+        with pytest.raises(RuntimeError, match="export"):
+            invocation.invoke(ctx)
+
+
 def test_render_thumbnail_raises_on_none_save_image(tmp_path: Path) -> None:
     """_render_thumbnail raises RuntimeError when scene.save_image returns None (headless env)."""
     from nodes.hunyuan3d.invocations import _render_thumbnail

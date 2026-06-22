@@ -1,2 +1,2 @@
 hy3dgen>=0.2.0
-trimesh>=4.0.0
+trimesh>=4.0.0,<5

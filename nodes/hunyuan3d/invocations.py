@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal, Optional
 
 from PIL import Image
@@ -82,11 +83,18 @@ class ImageTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
     )
 
     def invoke(self, context: InvocationContext) -> Hunyuan3DOutput:
+        # 0. Resolve model path (relative paths are resolved against InvokeAI root)
+        resolved_model_path = Path(self.model_path)
+        if not resolved_model_path.is_absolute():
+            from invokeai.app.services.config import get_config
+            resolved_model_path = get_config().root_path / resolved_model_path
+        model_path = str(resolved_model_path)
+
         # 1. Load source image
         source_image: Image.Image = context.images.get_pil(self.image.image_name)
 
         # 2. Load (or retrieve cached) pipeline
-        pipeline = load_model(self.model_path)
+        pipeline = load_model(model_path)
 
         # 3. Run inference — pipeline returns a list; first element is the mesh
         meshes = pipeline(
@@ -100,7 +108,8 @@ class ImageTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
 
         # 4. Export to bytes and save to disk
         fmt = self.output_format
-        mesh_bytes = mesh.export(file_type=fmt)
+        raw_export = mesh.export(file_type=fmt)
+        mesh_bytes = raw_export.encode("utf-8") if isinstance(raw_export, str) else raw_export
         if not mesh_bytes:
             raise RuntimeError(
                 f"mesh.export() returned empty/None for format '{fmt}'. Mesh may be degenerate."
@@ -152,7 +161,14 @@ class TextTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
     )
 
     def invoke(self, context: InvocationContext) -> Hunyuan3DOutput:
-        pipeline = load_model(self.model_path)
+        # 0. Resolve model path (relative paths are resolved against InvokeAI root)
+        resolved_model_path = Path(self.model_path)
+        if not resolved_model_path.is_absolute():
+            from invokeai.app.services.config import get_config
+            resolved_model_path = get_config().root_path / resolved_model_path
+        model_path = str(resolved_model_path)
+
+        pipeline = load_model(model_path)
 
         meshes = pipeline(
             prompt=self.prompt,
@@ -164,7 +180,8 @@ class TextTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
         mesh = meshes[0]
 
         fmt = self.output_format
-        mesh_bytes = mesh.export(file_type=fmt)
+        raw_export = mesh.export(file_type=fmt)
+        mesh_bytes = raw_export.encode("utf-8") if isinstance(raw_export, str) else raw_export
         if not mesh_bytes:
             raise RuntimeError(
                 f"mesh.export() returned empty/None for format '{fmt}'. Mesh may be degenerate."
