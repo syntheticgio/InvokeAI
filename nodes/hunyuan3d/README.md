@@ -1,6 +1,8 @@
 # Hunyuan3D Node Pack for InvokeAI
 
-Adds `Image to 3D (Hunyuan3D)` and `Text to 3D (Hunyuan3D)` nodes to the InvokeAI Workflows tab, powered by [Hunyuan3D 2.1](https://github.com/Tencent/Hunyuan3D-2).
+Adds an `Image to 3D (Hunyuan3D)` node to the InvokeAI Workflows tab, powered by [Hunyuan3D 2.1](https://github.com/Tencent/Hunyuan3D-2).
+
+Hunyuan3D 2.1 is an image-to-mesh model — it has no built-in text-to-image stage. To generate a 3D mesh from a text prompt, chain InvokeAI's own text-to-image node in front of this node (see "Generating from a text prompt" below).
 
 ## Installation
 
@@ -53,27 +55,18 @@ Converts an existing image into a 3D mesh.
 
 ---
 
-## Node: Text to 3D
+## Generating from a text prompt
 
-Generates a 3D mesh from a text description. Internally generates a single-view image first, then converts it to a mesh.
-
-| Input | Type | Default | Description |
-|-------|------|---------|-------------|
-| `prompt` | string | — | Description of the object (e.g. "a wooden treasure chest") |
-| `model_path` | string | `models/hunyuan3d/hunyuan3d-2-1` | Path to weights |
-| `steps` | int | 30 | Diffusion steps (10–100) |
-| `guidance_scale` | float | 5.0 | Guidance scale (1.0–20.0) |
-| `output_format` | glb/obj/fbx | glb | Mesh file format |
-| `render_thumbnail` | bool | true | Save a PNG preview to the gallery |
-
-Outputs are identical to Image to 3D.
-
-### Example workflow
+Hunyuan3D only accepts an image, so to go from text to 3D, chain InvokeAI's own image generation node in front of `Image to 3D`:
 
 ```
-[String Primitive "a wooden barrel"] → [Text to 3D] → thumbnail → [Preview Image]
-                                                     → mesh_path → [Show Text]
+[Text to Image (e.g. SDXL)] → image → [Image to 3D] → thumbnail → [Preview Image]
+                                                      → mesh_path → [Show Text]
 ```
+
+Tips for better meshes:
+- Use a prompt that produces a single centered object on a plain background (e.g. "a wooden treasure chest, white background, product photo")
+- A square aspect ratio (1:1) works best as input to Hunyuan3D
 
 ---
 
