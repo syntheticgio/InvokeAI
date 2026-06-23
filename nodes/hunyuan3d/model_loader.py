@@ -37,5 +37,12 @@ def _load_from_disk(model_path: str) -> Any:
             "hy3dgen is not installed. Run: pip install -r nodes/hunyuan3d/requirements.txt"
         ) from e
 
-    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model_path)
+    # hy3dgen defaults to device='cuda', which crashes on machines without CUDA
+    # (e.g. Apple Silicon, where InvokeAI itself correctly selects MPS). Reuse
+    # InvokeAI's own device detection so we match whatever backend it chose.
+    from invokeai.backend.util.devices import TorchDevice
+
+    device = TorchDevice.choose_torch_device()
+
+    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(model_path, device=str(device))
     return pipeline

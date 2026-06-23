@@ -58,3 +58,28 @@ def test_load_from_disk_raises_on_missing_hy3dgen(tmp_path: Path) -> None:
     with patch.dict(sys.modules, {"hy3dgen": None, "hy3dgen.shapegen": None}):
         with pytest.raises(ImportError, match="hy3dgen is not installed"):
             _load_from_disk(str(model_dir))
+
+
+def test_load_from_disk_passes_detected_device_to_pipeline(tmp_path: Path) -> None:
+    """_load_from_disk passes InvokeAI's chosen torch device to from_pretrained,
+    instead of relying on hy3dgen's hardcoded 'cuda' default (which crashes on
+    machines without CUDA, e.g. Apple Silicon)."""
+    import torch
+
+    from nodes.hunyuan3d.model_loader import _load_from_disk
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+
+    fake_pipeline_cls = MagicMock()
+    fake_module = MagicMock()
+    fake_module.Hunyuan3DDiTFlowMatchingPipeline = fake_pipeline_cls
+
+    with patch.dict(sys.modules, {"hy3dgen.shapegen": fake_module}), \
+         patch(
+             "invokeai.backend.util.devices.TorchDevice.choose_torch_device",
+             return_value=torch.device("mps"),
+         ):
+        _load_from_disk(str(model_dir))
+
+    fake_pipeline_cls.from_pretrained.assert_called_once_with(str(model_dir), device="mps")
