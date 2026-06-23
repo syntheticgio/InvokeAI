@@ -37,7 +37,7 @@ Converts an existing image into a 3D mesh.
 | `steps` | int | 30 | Diffusion steps (10–100) |
 | `guidance_scale` | float | 5.0 | Guidance scale (1.0–20.0) |
 | `output_format` | glb/obj/fbx | glb | Mesh file format |
-| `render_thumbnail` | bool | true | Save a PNG preview to the gallery |
+| `render_thumbnail` | bool | false | Save a PNG preview to the gallery (see Troubleshooting — unreliable on macOS) |
 
 | Output | Type | Description |
 |--------|------|-------------|
@@ -91,4 +91,6 @@ This node pack makes **zero changes** to InvokeAI core files. You can safely run
 
 **"hy3dgen is not installed"** — run `pip install -r nodes/hunyuan3d/requirements.txt`.
 
-**Thumbnail is blank or black** — trimesh's renderer requires a display. On headless servers, install `xvfb` and run InvokeAI with `xvfb-run`. Alternatively, set `render_thumbnail=False` to skip thumbnail generation.
+**"No module named 'pyglet'" or thumbnail rendering crashes** — `render_thumbnail` defaults to `False` for exactly this reason: trimesh's offscreen renderer depends on `pyglet<2`, and even with that installed it can fail on macOS (`'CocoaAlternateEventLoop' object has no attribute 'platform_event_loop'`) because pyglet's windowed event loop doesn't reliably support headless rendering there. **The mesh file always saves successfully regardless of this setting** — `render_thumbnail` only controls the optional gallery preview. If you want to try enabling it:
+- Linux: install `xvfb` and run InvokeAI with `xvfb-run`, with `pyglet<2` installed
+- macOS: rendering is currently unreliable; leave `render_thumbnail=False` and open the saved mesh file directly in Blender or a glTF viewer instead

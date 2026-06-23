@@ -1,2 +1,4 @@
 hy3dgen>=0.2.0
 trimesh>=4.0.0,<5
+pyglet<2  # trimesh's offscreen renderer requires pyglet 1.x; rendering may still
+          # fail on macOS (Cocoa event loop). See README troubleshooting section.

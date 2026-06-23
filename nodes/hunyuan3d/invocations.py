@@ -77,7 +77,12 @@ class ImageTo3DInvocation(BaseInvocation, WithMetadata, WithBoard):
         default="glb", description="Output mesh format"
     )
     render_thumbnail: bool = InputField(
-        default=True, description="Render a PNG preview thumbnail for the gallery"
+        default=False,
+        description=(
+            "Render a PNG preview thumbnail for the gallery. Requires a working trimesh "
+            "render backend (pyglet/pyrender); known to fail on some macOS setups. "
+            "The mesh file always saves regardless of this setting."
+        ),
     )
 
     def invoke(self, context: InvocationContext) -> Hunyuan3DOutput:
